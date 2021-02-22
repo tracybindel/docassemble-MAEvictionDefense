@@ -1,0 +1,329 @@
+---
+metadata:
+  interview_identifier: "MADE: Massachusetts Defense for Eviction (Launch)"
+  title: |
+    MADE: Massachusetts Defense for Eviction
+  short title: |
+    MADE (Eviction)
+  description: |
+    This interview helps you complete a summary process answer and request for discovery.
+  authors:
+    - name: Quinten Steenhuis
+      organization: Greater Boston Legal Services
+  error help: |
+    # We ran into a bug.
+    We are very sorry for the inconvenience. 
+    
+    [Please tell us more about the bug at this link](${ interview_url(i=user_info().package + ":feedback.yml", github_repo="docassemble-MAEvictionDefense", github_user='gbls', variable=user_info().variable, question_id=user_info().question_id, local=False,reset=1)} ){:target="_blank"}.
+    
+    1. Try reloading the screen (use the refresh button) and fill in information
+    that you left blank.
+    2.  You can use the paper forms instead.
+    Please download the [Answer](https://www.masslegalhelp.org/housing/lt1-booklet-3-answer.pdf) 
+    and the [Request for Discovery](https://www.masslegalhelp.org/housing/lt1-booklet-4-discovery.pdf).
+    You can follow the [instructions](https://www.masslegalhelp.org/housing/lt1-booklet-1-representing-yourself.pdf) here.
+  revision_date: 2021-01-04
+---
+code: |
+  revisit_sharing_url = url_ask(['share_fields', 'share_success', {'recompute': ['share_email','sent_sharing_email','share_cell','sent_sharing_text']} ])
+---
+default screen parts:
+  post: |
+    % if not user_logged_in():
+    [:sign-in-alt: Sign-in](${url_of('login', next=interview_url())}) or [register](${url_of('register', next=interview_url())}) to save your progress.
+    % endif
+
+    Feedback, suggestions, or comments? [Complete this survey](${ interview_url(i=user_info().package + ":feedback.yml", github_repo="docassemble-MAEvictionDefense", github_user='gbls', variable=user_info().variable, question_id=user_info().question_id, local=False,reset=1)} ){:target="_blank"}.
+
+    ${action_button_html(revisit_sharing_url, icon="share", color="success", label="Share")}
+  pre: |
+    % if get_config('debug'):
+    `Page id: ${ user_info().question_id }`
+    % endif
+    
+    % if defined('acknowledged_information_use'):
+    ${get_language_list(get_tuples(['en','es','vi','pt','zh-t','ht']),current=user_language)}
+    % endif
+  continue button label: |
+    ${word("Next")}    
+# post: |
+#   <div style="text-align: right; padding: 2em">
+#   Feedback, suggestions, or comments? 
+#   <a href="mailto:made@gbls.org">contact MADE@GBLS.org</a>
+#   </div>
+---
+translations:
+  - eviction_es.xlsx
+  - eviction_zh-t.xlsx
+  - eviction_pt.xlsx
+  - eviction_vi.xlsx
+  - eviction_ht.xlsx
+---
+features:
+  question help button: True
+  question back button: True
+  progress bar: True
+  navigation: True
+  default icons: material icons
+  javascript:
+    - fix_back_button.js
+---
+modules:
+  - docassemble.base.util
+  - docassemble.base.legal
+  - docassemble.MACourts.macourts
+  - docassemble.income.income
+  - .discovery
+  - .language
+  - .gbls_intake
+  - .review
+---
+imports:
+  - holidays
+  - dt_send_answers
+  #- re
+---
+objects:
+  - tenant: Individual
+  - additional_tenants: DAList.using(object_type=Individual)
+  - household: DAList.using(object_type=Individual)
+  - incomes: IncomeList.using(there_are_any=True)
+  - ntq_pictures: DAFileList.using(there_are_any = True)
+  - landlord: Person
+  - landlords_attorney: Person
+  - court: MACourt
+  - case: Case
+  - eviction: DAObject
+  - tenancy: DAObject
+  - claims: DAObject
+  - facts: DAObject
+  - bad_conditions: DAObject
+  - bqe: DAObject
+  - disability: DAObject
+  - fault: DAObject
+  - initial_defense: DAObject
+  - last_months_rent: DAObject
+  - other: DAObject
+  - postforeclosure: DAObject
+  - postforeclosure.no_just_cause: DAObject
+  - postforeclosure.notice_provisions: DAObject
+  - retaliation: DAObject
+  - security_deposit: DAObject
+  - subsidized_housing: DAObject
+  - discrimination: DAObject
+  - relief: DAObject
+  - relief.stay: DAObject 
+  - consumer_protection: DAObject
+  - discrimination.sexual_harassment: DAObject
+  - county: DAObject
+  - ints: DiscoveryDict
+  - drq: DiscoveryDict
+  - other_ints: DiscoveryList
+  - other_drq: DiscoveryList
+  - review_answers: DAObject
+  - macourts: MACourtList.using(courts=True)
+---
+initial: True
+code: |
+  process_action()
+---
+initial: True
+code: |
+  set_language(user_language)
+---
+code: |
+  if url_args.get('lang'):
+    user_language = url_args.get('lang')
+  else:
+    user_language= 'en'
+---
+event: change_language
+code: |
+  if 'lang' in action_arguments():
+    user_language = action_argument('lang')
+    set_language(user_language)
+---
+id: language
+question: |
+  Language
+subquestion: |
+  ${get_language_list(get_tuples(['en','es','vi','pt','zh-t','ht']),current=user_language)}
+field: language
+---
+include:
+  - review_screens.yml
+  - eviction.en.yml
+  - eviction.code.yml
+  - eviction.cron.yml
+  - eviction.attachments.yml
+  - interview-order.yml
+#  - help.yml
+  - discovery-logic.yml
+  - compel_discovery.yml
+  - federal_poverty_level.yml
+---
+comment: |
+  Transition to MACourt object from Court
+mandatory: True
+id: macourt_transition
+code: |
+  if defined('court.county'):
+    del court
+---
+comment: |
+  This block controls the overall interview flow.
+  interview-order.yml contains questions which set the logical order of the main Answer form
+  which must be completed before discovery is generated.
+  Then we load discovery defaults from a CSV file or Google Sheets.
+  Finally, we display the final interview screens.
+id: parent_interview_flow
+mandatory: True
+code: |
+  nav.set_section('start')
+  multi_user = True
+  allow_cron = True
+  speak_text = True
+  menu_items = [action_menu_item('Review Answers', 'road_map')]
+  menu_items.append( {'url': url_ask(['share_fields', 'share_success', {'recompute': ['share_email','sent_sharing_email','share_cell','sent_sharing_text']}]), 'label': 'Share interview'})
+  menu_items.append(action_menu_item('Language','language'))
+  set_live_help_status(availability='available', mode='help',partner_roles='advocate')
+  
+  started_on_phone # check to see what the starting device is
+
+  acknowledged_information_use
+
+  if user_language == 'es':
+    default_lang = 'Spanish'
+  else:
+    default_lang = ''
+
+  all_answer_variables # refers to variables listed in interview-order.yml
+  nav.set_section('review_discovery')
+  loaded_discovery
+  if person_answering == 'attorney' or tenant_review_discovery:
+    interrogatory_questions
+    drq_questions
+  
+  nav.set_section('review_signature')
+  if started_on_phone:
+    saw_signature_choice = True
+    if person_answering == 'attorney' and representation_type == 'entering_appearance':
+      tenants_attorney.signature
+    else:
+      tenant.signature
+      if additional_tenants.there_are_any:
+        for t in additional_tenants:
+          t.signature
+  else: 
+    saw_signature_choice
+    if defined('signature_choice') and signature_choice =='this device':
+      if person_answering == 'attorney' and representation_type == 'entering_appearance':
+        tenants_attorney.signature
+      else:
+        tenant.signature
+        if additional_tenants.there_are_any:
+          for t in additional_tenants:
+            t.signature
+    elif defined('signature_choice') and signature_choice == 'phone':
+      saw_signature_qrcode
+      if defined('link_cell') or defined('link_email'):
+        if defined('link_cell') and link_cell and task_not_yet_performed('send signature link'):
+          send_sms(task='send signature link', to=link_cell,template=interview_link)
+        if defined('link_email') and link_email:
+          send_email(task='send signature link', to=link_email, template=interview_link)
+        signature_wait_screen
+        if person_answering == 'attorney' and representation_type == 'entering_appearance':
+          tenants_attorney.signature
+        else:
+          tenant.signature
+          if additional_tenants.there_are_any:
+            for t in additional_tenants:
+              t.signature
+        if device() and device().is_mobile:
+          signature_phone_followup
+      else:
+        if person_answering == 'attorney' and representation_type == 'entering_appearance':
+          tenants_attorney.signature
+        else:
+          tenant.signature
+          if additional_tenants.there_are_any:
+            for t in additional_tenants:
+              t.signature
+    # Handle situation where someone uses the QR code    
+    if saw_signature_choice and not defined('signature_choice'):
+      if person_answering == 'attorney' and representation_type == 'entering_appearance':
+        tenants_attorney.signature
+      else:
+        tenant.signature
+        if additional_tenants.there_are_any:
+          for t in additional_tenants:
+            t.signature    
+      signature_phone_followup
+      signature_choice = 'phone'
+
+  nav.set_section('conclusion')
+  method_of_service
+  if url_args.get('clinic', '').lower() == 'gbls':
+    ls_case_id
+
+  # Ask the tenant if they want to submit an intake iff in service area and we're not already in a GBLS clinic
+  if in_service_area(tenant) and not url_args.get('clinic', '').lower() == 'gbls':
+    ask_intake_questions
+    if ask_intake_questions == 'reminder':
+      sent_take_intake_later_email
+    if ask_intake_questions == "ask_now" or (ask_intake_questions == 'reminder' and time_to_do_intake):
+      asked_intake_questions
+      created_online_intake
+  else:
+    out_of_service_area
+  
+  if (defined('compel_discovery_needed') and compel_discovery_needed) or 'compel_discovery' in url_args:
+    compel_discovery_motion
+  else:
+    send_user_email
+    send_ls_email
+    # Only send responses from the live site
+    if not interface() == 'cron' and not get_config('url root') == "https://interviews-dev.gbls.org":
+      sent_answers # will only send once, so doesn't account for revisions
+    store_made_snapshot
+    download_forms
+---
+code: |
+  store_variables_snapshot(persistent=True, data={"zip": tenant.address.zip, "city": tenant.address.city, "tenancy_type": tenancy_type, "eviction_reason": eviction_reason, "eviction_detailed_reason": str(eviction_detailed_reason), "user_language": user_language, 'court': str(court), 'rent_amount': showifdef('facts.tenant_rent_share'), 'contract_rent': showifdef('facts.tenant_contract_rent'), "person_answering": person_answering })
+  store_made_snapshot = True
+---
+code: |
+  understands_eligibility
+  if not tenant.is_over60:
+    household_size
+  if not tenant.is_over60 and not household_qualifies:
+      does_not_qualify
+  else:
+    review_intake_information
+    if not defined('tenant.phone_number') or not defined('tenant.email') or (tenant.phone_number.rstrip() == '' or tenant.email.rstrip() == '' ):
+      tenant.no_phone
+      tenant.no_email
+      tenant.other_contact_method
+    tenant.birthdate
+    household.gather()
+    incomes.gather()
+    tenant.gender
+    ntq_pictures.gather()
+    intake_additional_information
+    # view_intake
+  asked_intake_questions = True
+---
+code: |
+  case.case_id = ''
+  #dt_send_answers.send_answers(['landlords_attorney','case.case_id'])
+  sent_answers = True
+---
+comment: |
+  Send interview responses to community.lawyer
+reconsider: True
+code: |
+  # import dt_send_answers
+
+  # Workarounds for dt_send_answers
+  #case.case_id = "" # Needed for dt-sendanswers
+  answers_response = ''
